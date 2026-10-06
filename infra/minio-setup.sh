@@ -45,53 +45,30 @@ if [ $RETRY_COUNT -eq $MAX_RETRIES ]; then
     exit 1
 fi
 
-# Configure storage client (mc) - Run as target UID/GID
-echo "[STORAGE-SYSTEM-SETUP] Configuring storage client..."
-
-# Get target UID/GID from environment or default
+# Target UID/GID used to run the bucket helper
 TARGET_UID=${PALMR_UID:-${MINIO_UID:-1001}}
 TARGET_GID=${PALMR_GID:-${MINIO_GID:-1001}}
 
-# Ensure home directory exists with correct ownership
-if [ "$(id -u)" = "0" ]; then
-    mkdir -p /home/palmr/.mc
-    chown -R $TARGET_UID:$TARGET_GID /home/palmr 2>/dev/null || true
-fi
-
-# Run mc commands as target user with explicit config location
 run_as_target() {
     if [ "$(id -u)" = "0" ]; then
-        su-exec $TARGET_UID:$TARGET_GID \
-            env HOME="/home/palmr" MC_CONFIG_DIR="/home/palmr/.mc" \
-            "$@"
+        su-exec $TARGET_UID:$TARGET_GID "$@"
     else
-        HOME="/home/palmr" MC_CONFIG_DIR="/home/palmr/.mc" "$@"
+        "$@"
     fi
 }
 
-# Configure with verbose error output
-if ! run_as_target mc alias set palmr-local http://127.0.0.1:9379 "$MINIO_ROOT_USER" "$MINIO_ROOT_PASSWORD" 2>&1; then
-    echo "[STORAGE-SYSTEM-SETUP] ✗ Failed to configure storage client"
+# Create bucket if missing (idempotent). New buckets are private by default.
+echo "[STORAGE-SYSTEM-SETUP] Ensuring storage bucket exists: $MINIO_BUCKET..."
+if ! run_as_target env \
+    EB_ENDPOINT="http://127.0.0.1:9379" \
+    EB_ACCESS_KEY="$MINIO_ROOT_USER" \
+    EB_SECRET_KEY="$MINIO_ROOT_PASSWORD" \
+    EB_BUCKET="$MINIO_BUCKET" \
+    node /app/palmr-app/ensure-bucket.cjs; then
+    echo "[STORAGE-SYSTEM-SETUP] ✗ Failed to create bucket"
     echo "[STORAGE-SYSTEM-SETUP] Debug: UID/GID=$TARGET_UID:$TARGET_GID, User=$(whoami)"
     exit 1
 fi
-
-# Create bucket (idempotent - won't fail if exists)
-echo "[STORAGE-SYSTEM-SETUP] Ensuring storage bucket exists: $MINIO_BUCKET..."
-if run_as_target mc ls palmr-local/$MINIO_BUCKET > /dev/null 2>&1; then
-    echo "[STORAGE-SYSTEM-SETUP]   ✓ Bucket '$MINIO_BUCKET' already exists"
-else
-    echo "[STORAGE-SYSTEM-SETUP]   Creating bucket '$MINIO_BUCKET'..."
-    run_as_target mc mb "palmr-local/$MINIO_BUCKET" 2>/dev/null || {
-        echo "[STORAGE-SYSTEM-SETUP] ✗ Failed to create bucket"
-        exit 1
-    }
-    echo "[STORAGE-SYSTEM-SETUP]   ✓ Bucket created"
-fi
-
-# Set bucket policy to private (always reapply)
-echo "[STORAGE-SYSTEM-SETUP] Setting bucket policy..."
-run_as_target mc anonymous set none "palmr-local/$MINIO_BUCKET" 2>/dev/null || true
 
 # Save credentials for Palmr to use
 echo "[STORAGE-SYSTEM-SETUP] Saving credentials to $MINIO_CREDENTIALS..."

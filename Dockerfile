@@ -16,9 +16,6 @@ RUN corepack enable pnpm
 COPY infra/install-minio.sh /tmp/install-minio.sh
 RUN chmod +x /tmp/install-minio.sh && /tmp/install-minio.sh
 
-# Install storage client (mc) for appropriate architecture
-COPY infra/install-mc.sh /tmp/install-mc.sh
-RUN chmod +x /tmp/install-mc.sh && /tmp/install-mc.sh
 
 # Set working directory
 WORKDIR /app
@@ -132,6 +129,7 @@ COPY infra/server-start.sh /app/server-start.sh
 COPY infra/start-minio.sh /app/start-minio.sh
 COPY infra/minio-setup.sh /app/minio-setup.sh
 COPY infra/load-minio-credentials.sh /app/load-minio-credentials.sh
+COPY --chown=palmr:nodejs infra/ensure-bucket.cjs /app/palmr-app/ensure-bucket.cjs
 COPY infra/configs.json /app/infra/configs.json
 COPY infra/providers.json /app/infra/providers.json
 COPY infra/check-missing.js /app/infra/check-missing.js
