@@ -35,30 +35,30 @@
     "seed": "node prisma/seed.js"
   },
   "dependencies": {
-    "@aws-sdk/client-s3": "^3.817.0",
-    "@aws-sdk/s3-request-presigner": "^3.817.0",
-    "@fastify/cookie": "^11.0.2",
-    "@fastify/cors": "^10.0.2",
-    "@fastify/jwt": "^9.1.0",
-    "@fastify/multipart": "^9.0.3",
-    "@fastify/static": "^8.2.0",
-    "@fastify/swagger": "^9.5.1",
-    "@fastify/swagger-ui": "^5.2.3",
+    "@aws-sdk/client-s3": "^3.1146.0",
+    "@aws-sdk/s3-request-presigner": "^3.1146.0",
+    "@fastify/cookie": "^11.1.2",
+    "@fastify/cors": "^11.3.0",
+    "@fastify/jwt": "^10.2.2",
+    "@fastify/multipart": "^10.1.2",
+    "@fastify/static": "^10.1.5",
+    "@fastify/swagger": "^9.9.1",
+    "@fastify/swagger-ui": "^6.1.1",
     "@prisma/client": "^6.11.0",
-    "@scalar/fastify-api-reference": "^1.32.1",
+    "@scalar/fastify-api-reference": "^1.73.0",
     "@types/archiver": "^7.0.0",
     "@types/crypto-js": "^4.2.2",
     "archiver": "^7.0.1",
     "bcryptjs": "^2.4.3",
     "crypto-js": "^4.2.0",
-    "fastify": "^5.4.0",
+    "fastify": "^5.12.5",
     "fastify-type-provider-zod": "^4.0.2",
     "jose": "^5.10.0",
     "node-fetch": "^3.3.2",
-    "nodemailer": "^6.10.0",
+    "nodemailer": "^10.0.15",
     "openid-client": "^6.6.2",
     "qrcode": "^1.5.4",
-    "sharp": "^0.34.2",
+    "sharp": "^0.35.5",
     "speakeasy": "^2.0.0",
     "zod": "^3.25.67"
   },
@@ -83,5 +83,17 @@
     "tsx": "^4.19.2",
     "typescript": "^5.7.3",
     "vitest": "^2.1.0"
+  },
+  "pnpm": {
+    "overrides": {
+      "@fastify/busboy": ">=3.2.1",
+      "fast-uri": ">=3.1.8",
+      "nanoid@>=4": ">=5.1.16",
+      "ajv@>=7": ">=8.18.0",
+      "bn.js@<5": ">=4.12.3",
+      "yaml@>=2": ">=2.8.3",
+      "brace-expansion@>=2": ">=2.1.7",
+      "minimatch@>=9 <10": ">=9.0.7"
+    }
   }
 }

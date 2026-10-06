@@ -59,6 +59,24 @@ export class AuthProvidersController {
     };
   }
 
+  /**
+   * The post-login redirect target originates from a client-supplied query
+   * parameter. Only allow same-origin destinations to avoid open redirects.
+   */
+  private resolveSafeRedirect(target: string | undefined, baseUrl: string): string {
+    const fallback = `${baseUrl}/dashboard`;
+    if (!target) return fallback;
+
+    try {
+      const base = new URL(baseUrl);
+      const resolved = new URL(target, base);
+      if (resolved.origin !== base.origin) return fallback;
+      return resolved.toString();
+    } catch {
+      return fallback;
+    }
+  }
+
   private buildBaseUrl(requestContext: RequestContext): string {
     return `${requestContext.protocol}://${requestContext.host}`;
   }
@@ -385,8 +403,7 @@ export class AuthProvidersController {
 
       this.setAuthCookie(reply, jwt, request.protocol === "https");
 
-      const redirectUrl = result.redirectUrl || "/dashboard";
-      const fullRedirectUrl = redirectUrl.startsWith("http") ? redirectUrl : `${baseUrl}${redirectUrl}`;
+      const fullRedirectUrl = this.resolveSafeRedirect(result.redirectUrl, baseUrl);
 
       return reply.redirect(fullRedirectUrl);
     } catch (error) {
