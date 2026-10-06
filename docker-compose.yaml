@@ -1,55 +1,53 @@
+# Palmr + storage S3 locale.
+# Palmr richiede uno storage compatibile S3 (il MinIO integrato non è più incluso).
+#
+# Crea un file ".env" accanto a questo, con:
+#   HOST_IP=192.168.1.100          # IP o nome DNS raggiungibile dal BROWSER
+#   S3_SECRET_KEY=una-password-lunga-e-casuale
+#
+# Avvio:  docker compose up --build -d
+
 services:
+  storage:
+    # Fork comunitario di MinIO. Dopo il primo avvio funzionante, fissa un tag preciso.
+    image: pgsty/minio:latest
+    container_name: palmr-storage
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: palmr-admin
+      MINIO_ROOT_PASSWORD: ${S3_SECRET_KEY:?imposta S3_SECRET_KEY nel file .env}
+    ports:
+      - "9000:9000" # API S3: deve essere raggiungibile dal browser (URL firmati)
+    volumes:
+      - storage_data:/data
+      # Per usare un disco/cartella tua: - /percorso/tuo/disco:/data
+    restart: unless-stopped
+
   palmr:
-    image: kyantech/palmr:latest
+    build: .
+    image: palmr:local
     container_name: palmr
     environment:
-      # ==============================================================================
-      # STORAGE CONFIGURATION
-      # ==============================================================================
-      # By default, Palmr uses internal storage - ZERO CONFIG NEEDED!
-      # Files are managed automatically with no setup required.
-      #
-      # Want to use external S3 storage (AWS, S3-compatible, etc)? Just add:
-      # - ENABLE_S3=true                    # Enable external S3
-      # - S3_ENDPOINT=s3.amazonaws.com      # Your S3 endpoint
-      # - S3_ACCESS_KEY=your-access-key     # Your access key
-      # - S3_SECRET_KEY=your-secret-key     # Your secret key
-      # - S3_BUCKET_NAME=palmr-files        # Your bucket name
-      # - S3_REGION=us-east-1               # Region (optional)
-      # - S3_USE_SSL=true                   # Use SSL (optional)
-      # - S3_FORCE_PATH_STYLE=false         # Path-style URLs (optional, true for Minio)
-      # - S3_REJECT_UNAUTHORIZED=true       # Reject self-signed certs (optional)
-      #
-      # ==============================================================================
-      # USER/GROUP CONFIGURATION
-      # ==============================================================================
-      # - PALMR_UID=1000                    # UID for container processes (optional)
-      # - PALMR_GID=1000                    # GID for container processes (optional)
-      #
-      # ==============================================================================
-      # APPLICATION SETTINGS
-      # ==============================================================================
-      # - DEFAULT_LANGUAGE=en-US            # Default language (optional)
-      # - PRESIGNED_URL_EXPIRATION=3600     # Presigned URL expiration in seconds (optional)
-      # - SECURE_SITE=true                  # Set true if using HTTPS reverse proxy (optional)
-      STORAGE_URL: "https://palmr-demo:9379" # REQUIRED for internal storage: Full storage URL with protocol (e.g., https://syrg.palmr.com or http://192.168.1.100:9379). Not needed when ENABLE_S3=true.
-      #
+      ENABLE_S3: "true"
+      S3_ENDPOINT: ${HOST_IP:?imposta HOST_IP nel file .env}
+      S3_PORT: "9000"
+      S3_USE_SSL: "false"
+      S3_ACCESS_KEY: palmr-admin
+      S3_SECRET_KEY: ${S3_SECRET_KEY}
+      S3_BUCKET_NAME: palmr-files
+      S3_REGION: us-east-1
+      S3_FORCE_PATH_STYLE: "true"
+      S3_AUTO_CREATE_BUCKET: "true"
+      # SECURE_SITE: "true"   # solo se usi un reverse proxy HTTPS
     ports:
-      - "9379:9379" # Internal storage (S3-compatible, REQUIRED for file uploads when using internal storage)
-      - "5487:5487" # Web interface
-      - "3333:3333" # API (optional, only if you need direct API access)
+      - "5487:5487"
     volumes:
       - palmr_data:/app/server
-      # ==============================================================================
-      # ADVANCED: Use a different disk for file storage (for larger capacity)
-      # ==============================================================================
-      # Uncomment the line below to store files on a different disk:
-      # - /path/to/your/large/disk:/app/server/data
-      #
-      # Example: Mount a 2TB drive for files while keeping database on fast SSD
-      # - /mnt/storage/palmr-files:/app/server/data
-      #
+    depends_on:
+      - storage
     restart: unless-stopped
 
 volumes:
   palmr_data:
+    name: palmr_data
+  storage_data:

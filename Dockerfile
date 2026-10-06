@@ -12,10 +12,6 @@ RUN apk add --no-cache \
 # Enable pnpm
 RUN corepack enable pnpm
 
-# Install storage system for S3-compatible storage
-COPY infra/install-minio.sh /tmp/install-minio.sh
-RUN chmod +x /tmp/install-minio.sh && /tmp/install-minio.sh
-
 
 # Set working directory
 WORKDIR /app
@@ -126,15 +122,12 @@ RUN mkdir -p /etc/supervisor/conf.d
 
 # Copy server start script and configuration files
 COPY infra/server-start.sh /app/server-start.sh
-COPY infra/start-minio.sh /app/start-minio.sh
-COPY infra/minio-setup.sh /app/minio-setup.sh
-COPY infra/load-minio-credentials.sh /app/load-minio-credentials.sh
 COPY --chown=palmr:nodejs infra/ensure-bucket.cjs /app/palmr-app/ensure-bucket.cjs
 COPY infra/configs.json /app/infra/configs.json
 COPY infra/providers.json /app/infra/providers.json
 COPY infra/check-missing.js /app/infra/check-missing.js
-RUN chmod +x /app/server-start.sh /app/start-minio.sh /app/minio-setup.sh /app/load-minio-credentials.sh
-RUN chown -R palmr:nodejs /app/server-start.sh /app/start-minio.sh /app/minio-setup.sh /app/load-minio-credentials.sh /app/infra
+RUN chmod +x /app/server-start.sh
+RUN chown -R palmr:nodejs /app/server-start.sh /app/infra
 
 # Copy supervisor configuration
 COPY infra/supervisord.conf /etc/supervisor/conf.d/supervisord.conf
@@ -151,8 +144,11 @@ if [ "\${ENABLE_S3:-false}" = "true" ]; then
     echo "   Endpoint: \${S3_ENDPOINT:-not set}"
     echo "   Region: \${S3_REGION:-not set}"
 else
-    echo "📦 Storage Mode: Internal (Auto-configured)"
-    echo "   MinIO will start on port 9379"
+    echo "❌ ENABLE_S3 is not set to true."
+    echo "   The built-in MinIO storage is no longer included in this image"
+    echo "   (MinIO community binaries are discontinued)."
+    echo "   Configure an S3-compatible storage: see docker-compose.yaml"
+    exit 1
 fi
 echo "🔒 Secure Site: \${SECURE_SITE:-false}"
 echo "💾 Database: SQLite"
@@ -163,25 +159,17 @@ export DATABASE_URL="file:/app/server/prisma/palmr.db"
 export NEXT_PUBLIC_DEFAULT_LANGUAGE=\${DEFAULT_LANGUAGE:-en-US}
 
 # Ensure /app/server directory exists for bind mounts
-mkdir -p /app/server/uploads /app/server/temp-uploads /app/server/prisma /app/server/minio-data
+mkdir -p /app/server/uploads /app/server/temp-uploads /app/server/prisma
 
 # CRITICAL: Fix permissions BEFORE starting any services
 # This runs on EVERY startup to handle updates and corrupted metadata
-echo "🔐 Fixing permissions for internal storage..."
+echo "🔐 Fixing permissions..."
 
 # USE ENVIRONMENT VARIABLES: Allow runtime UID/GID configuration
 # Falls back to palmr user's UID/GID if not specified
 TARGET_UID=\${PALMR_UID:-\$(id -u palmr 2>/dev/null || echo "1001")}
 TARGET_GID=\${PALMR_GID:-\$(id -g palmr 2>/dev/null || echo "1001")}
 echo "   Target user: palmr (UID:\$TARGET_UID, GID:\$TARGET_GID)"
-
-# ALWAYS remove storage system metadata to prevent corruption issues
-# This is safe - storage system recreates it automatically
-# User data (files) are NOT in .minio.sys, they're safe
-if [ -d "/app/server/minio-data/.minio.sys" ]; then
-    echo "   🧹 Cleaning storage system metadata (safe, auto-regenerated)..."
-    rm -rf /app/server/minio-data/.minio.sys 2>/dev/null || true
-fi
 
 # SMART CHOWN: Only run expensive recursive chown when UID/GID changed
 # This dramatically speeds up subsequent starts
@@ -221,13 +209,6 @@ if [ "\$NEEDS_CHOWN" = "true" ]; then
         chown -R \$TARGET_UID:\$TARGET_GID "/app/server/prisma" 2>/dev/null || true
     fi
     
-    # For minio-data, we NEED recursive chown because MinIO creates subdirectories
-    # and needs write access to all of them
-    if [ -d "/app/server/minio-data" ]; then
-        echo "   🔧 Fixing MinIO storage permissions..."
-        chown -R \$TARGET_UID:\$TARGET_GID "/app/server/minio-data" 2>/dev/null || true
-    fi
-    
     # Save current UID/GID to marker
     echo "\$CURRENT_OWNER" > "\$UIDGID_MARKER"
     chown \$TARGET_UID:\$TARGET_GID "\$UIDGID_MARKER" 2>/dev/null || true
@@ -249,6 +230,23 @@ fi
 
 echo "✅ Storage ready, starting services..."
 
+# Optionally create the S3 bucket (idempotent). Useful for self-hosted S3 servers.
+if [ "\${S3_AUTO_CREATE_BUCKET:-false}" = "true" ]; then
+    case "\${S3_USE_SSL:-false}" in true) EB_SCHEME=https ;; *) EB_SCHEME=http ;; esac
+    EB_URL="\$EB_SCHEME://\${S3_ENDPOINT}"
+    if [ -n "\${S3_PORT:-}" ]; then EB_URL="\$EB_URL:\${S3_PORT}"; fi
+    echo "🪣 Ensuring bucket '\${S3_BUCKET_NAME}' exists..."
+    EB_TRY=0
+    until EB_ENDPOINT="\$EB_URL" EB_ACCESS_KEY="\${S3_ACCESS_KEY}" EB_SECRET_KEY="\${S3_SECRET_KEY}" EB_BUCKET="\${S3_BUCKET_NAME}" node /app/palmr-app/ensure-bucket.cjs; do
+        EB_TRY=\$((EB_TRY + 1))
+        if [ "\$EB_TRY" -ge 30 ]; then
+            echo "⚠️  Could not create/verify the bucket after \$EB_TRY attempts, continuing anyway"
+            break
+        fi
+        sleep 2
+    done
+fi
+
 # Start supervisor
 exec /usr/bin/supervisord -c /etc/supervisor/conf.d/supervisord.conf
 EOF
@@ -259,7 +257,7 @@ RUN chmod +x /app/start.sh
 VOLUME ["/app/server"]
 
 # Expose ports
-EXPOSE 3333 5487 9379 9378
+EXPOSE 3333 5487
 
 # Health check
 HEALTHCHECK --interval=30s --timeout=10s --start-period=60s --retries=3 \
