@@ -4,7 +4,7 @@ Issues and pull requests are welcome. Palmr is small and actively maintained, wi
 
 ## Quick start
 
-1. Fork [stlalpha/Palmr](https://github.com/stlalpha/Palmr) and clone your fork.
+1. Fork [M4th12/Palmr](https://github.com/M4th12/PalmrClaude) and clone your fork.
 2. Branch off `main`. There's no `next` or other long-running branch.
 3. Make your changes. The repo is a multi-app monorepo (`apps/server`, `apps/web`, `apps/docs`); each is independently installed and built. See [`CLAUDE.md`](CLAUDE.md) for the architecture overview.
 4. Run `pnpm validate` (lint + type-check) inside whichever app(s) you touched. For server changes, also run `pnpm test` — the suite uses vitest with an isolated SQLite DB and exercises share access control, reverse-share multipart, audio MIME, and bulk-download.
