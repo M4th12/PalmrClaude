@@ -1,12 +1,3 @@
-# Palmr + storage S3 locale.
-# Palmr richiede uno storage compatibile S3 (il MinIO integrato non è più incluso).
-#
-# Crea un file ".env" accanto a questo, con:
-#   HOST_IP=192.168.1.100          # IP o nome DNS raggiungibile dal BROWSER
-#   S3_SECRET_KEY=una-password-lunga-e-casuale
-#
-# Avvio:  docker compose up --build -d
-
 services:
   storage:
     # Fork comunitario di MinIO. Dopo il primo avvio funzionante, fissa un tag preciso.
@@ -16,8 +7,9 @@ services:
     environment:
       MINIO_ROOT_USER: palmr-admin
       MINIO_ROOT_PASSWORD: ${S3_SECRET_KEY:?imposta S3_SECRET_KEY nel file .env}
+      MINIO_API_CORS_ALLOW_ORIGIN: https://palmr.domain.it
     ports:
-      - "9000:9000" # API S3: deve essere raggiungibile dal browser (URL firmati)
+      - "127.0.0.1:9000:9000" # API S3: deve essere raggiungibile dal browser (URL firmati)
     volumes:
       - storage_data:/data
       # Per usare un disco/cartella tua: - /percorso/tuo/disco:/data
@@ -29,18 +21,19 @@ services:
     container_name: palmr
     environment:
       ENABLE_S3: "true"
-      S3_ENDPOINT: ${HOST_IP:?imposta HOST_IP nel file .env}
-      S3_PORT: "9000"
-      S3_USE_SSL: "false"
+      S3_ENDPOINT: https://s3.domain.it
+      #S3_PORT: "9000"
+      SECURE_SITE: "true"
+      S3_USE_SSL: "true"
       S3_ACCESS_KEY: palmr-admin
       S3_SECRET_KEY: ${S3_SECRET_KEY}
       S3_BUCKET_NAME: palmr-files
       S3_REGION: us-east-1
       S3_FORCE_PATH_STYLE: "true"
       S3_AUTO_CREATE_BUCKET: "true"
-      # SECURE_SITE: "true"   # solo se usi un reverse proxy HTTPS
+
     ports:
-      - "5487:5487"
+      - "127.0.0.1:5487:5487"
     volumes:
       - palmr_data:/app/server
     depends_on:
@@ -51,3 +44,8 @@ volumes:
   palmr_data:
     name: palmr_data
   storage_data:
+
+networks:
+  default:
+    external: true
+    name: npm_proxy
